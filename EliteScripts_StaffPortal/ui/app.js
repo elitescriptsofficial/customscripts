@@ -1,10 +1,25 @@
 const resource = 'EliteScripts_StaffPortal'
 
+const ticketCategories = {
+  admin: { label: 'Admin Tickets' },
+  legal: { label: 'Legal Tickets' },
+  gangs: { label: 'Gangs Tickets' },
+  sales: { label: 'Sales Tickets' },
+  pier: { label: 'Pier Team Tickets' },
+}
+
 function q(id){ return document.getElementById(id) }
 const app = q('app')
 
 q('close').addEventListener('click', ()=>{
   fetch(`https://${resource}/close`, { method: 'POST' })
+})
+
+q('createSupportTicket').addEventListener('click', ()=>{
+  const description = q('ticketDescription').value.trim()
+  const category = q('ticketCategory').value
+  if (!description) return alert('Enter a brief description of what happened')
+  fetch(`https://${resource}/createSupportTicket`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ description, category }) })
 })
 
 q('createRank').addEventListener('click', ()=>{
@@ -26,12 +41,35 @@ window.addEventListener('message', (event) => {
   if (!d) return
   if (d.action === 'open') {
     app.classList.remove('hidden')
+    if (d.mode === 'staff') {
+      openStaffView()
+    } else {
+      openTicketView()
+    }
   } else if (d.action === 'close') {
     app.classList.add('hidden')
   } else if (d.action === 'update') {
     renderData(d.ranks, d.assignments, d.isAdmin, d.permissions || [])
+  } else if (d.action === 'updateTickets') {
+    renderTickets(d.tickets, d.categories, d.canViewAll)
+  } else if (d.action === 'showPopup') {
+    showPopup(d.ticket, d.cancelled)
+  } else if (d.action === 'showFailure') {
+    alert('Support Ticket: ' + (d.reason || 'An error occurred'))
   }
 })
+
+function openTicketView(){
+  q('ticketMode').classList.remove('hidden')
+  q('staffMode').classList.add('hidden')
+  q('pageTitle').textContent = 'Support Ticket'
+}
+
+function openStaffView(){
+  q('ticketMode').classList.add('hidden')
+  q('staffMode').classList.remove('hidden')
+  q('pageTitle').textContent = 'Staff Portal'
+}
 
 function renderData(ranks, assignments, isAdmin, permissions){
   const ranksList = q('ranksList')
@@ -57,6 +95,38 @@ function renderData(ranks, assignments, isAdmin, permissions){
     li.textContent = id + ' => ' + assignments[id]
     assignList.appendChild(li)
   }
+}
+
+function renderTickets(tickets, categories, canViewAll){
+  const list = q('ticketsList')
+  list.innerHTML = ''
+  if (!Array.isArray(tickets) || tickets.length === 0) {
+    list.textContent = 'No support tickets available.'
+    return
+  }
+  tickets.sort((a,b) => a.id - b.id)
+  for (const ticket of tickets){
+    const li = document.createElement('li')
+    li.innerHTML = `<strong>${categories && categories[ticket.category] ? categories[ticket.category].label : ticket.category}</strong>`
+    const meta = document.createElement('div')
+    meta.className = 'ticket-meta'
+    meta.textContent = `#${ticket.id} • ${ticket.status} • ${ticket.identifier}`
+    const desc = document.createElement('div')
+    desc.className = 'ticket-desc'
+    desc.textContent = ticket.description
+    li.appendChild(meta)
+    li.appendChild(desc)
+    list.appendChild(li)
+  }
+}
+
+function showPopup(ticket, cancelled){
+  const popup = q('ticketPopup')
+  q('popupTitle').textContent = cancelled ? 'Support Ticket Cancelled' : 'Support Ticket'
+  q('popupText').textContent = cancelled ? 'Your support ticket has been cancelled.' : 'Someone will be with you soon.'
+  q('popupSubtext').textContent = cancelled ? '' : 'Press F7 to cancel ticket'
+  popup.classList.remove('hidden')
+  setTimeout(() => popup.classList.add('hidden'), 7000)
 }
 
 function renderPermissions(permissions){

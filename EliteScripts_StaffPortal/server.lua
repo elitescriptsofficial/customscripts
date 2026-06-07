@@ -1,10 +1,25 @@
 local resource = GetCurrentResourceName()
 local dataFile = Config.dataFile or "data/ranks.json"
+local ticketFile = Config.ticketDataFile or "data/tickets.json"
+local ticketCategories = Config.ticketCategories or {
+  admin = { label = "Admin Tickets", permission = "support.admin", team = "Team" },
+  legal = { label = "Legal Tickets", permission = "support.legal", team = "Legal Team" },
+  gangs = { label = "Gangs Tickets", permission = "support.gangs", team = "Gangs Team" },
+  sales = { label = "Sales Tickets", permission = "support.sales", team = "Sales Team" },
+  pier = { label = "Pier Team Tickets", permission = "support.pier", team = "Pier Team" },
+}
 
 local ranksData = {
   ranks = {},
   assignments = {}
 }
+
+local ticketsData = {
+  tickets = {},
+  nextId = 1
+}
+
+local activeTicketByIdentifier = {}
 
 -- registry for permissions provided by other resources
 local permissionsRegistry = {}
@@ -59,6 +74,32 @@ local function saveRanks()
   SaveResourceFile(resource, dataFile, encoded, -1)
 end
 
+local function loadTickets()
+  local raw = LoadResourceFile(resource, ticketFile)
+  if not raw or raw == '' then
+    ticketsData = { tickets = {}, nextId = 1 }
+    activeTicketByIdentifier = {}
+    return
+  end
+  local ok, parsed = pcall(function() return json.decode(raw) end)
+  if ok and type(parsed) == 'table' and type(parsed.tickets) == 'table' then
+    ticketsData = parsed
+    if type(ticketsData.nextId) ~= 'number' then ticketsData.nextId = #ticketsData.tickets + 1 end
+  else
+    ticketsData = { tickets = {}, nextId = 1 }
+  end
+  activeTicketByIdentifier = {}
+  for _, ticket in ipairs(ticketsData.tickets) do
+    if ticket.status == 'open' and ticket.identifier then
+      activeTicketByIdentifier[ticket.identifier] = ticket.id
+    end
+  end
+end
+
+local function saveTickets()
+  SaveResourceFile(resource, ticketFile, json.encode(ticketsData), -1)
+end
+
 local function isAdminSource(src)
   if src == 0 then return true end
   if Config.defaultAdmin == nil or Config.defaultAdmin == "replace_with_admin_identifier" then
@@ -80,6 +121,17 @@ local function resolveIdentifier(arg)
     return ids and ids[1] or nil
   end
   return arg
+end
+
+local function getPlayerPrimaryIdentifier(src)
+  if not src then return nil end
+  local ids = GetPlayerIdentifiers(src)
+  return ids and ids[1] or tostring(src)
+end
+
+local function getCategory(categoryId)
+  if not categoryId then return nil end
+  return ticketCategories[categoryId]
 end
 
 -- Permission check: supports wildcard '*' permission on rank
@@ -130,6 +182,104 @@ function getAssignments()
   return ranksData.assignments
 end
 
+local function isSupportAdmin(identifier)
+  if not identifier then return false end
+  local rank = getRank(identifier)
+  if rank == 'ADM' then
+    return true
+  end
+  return hasPermission(identifier, 'support.viewall') or hasPermission(identifier, 'support.*') or hasPermission(identifier, '*')
+end
+
+local function canViewTickets(identifier)
+  if not identifier then return false end
+  if isSupportAdmin(identifier) then return true end
+  for _, category in pairs(ticketCategories) do
+    if hasPermission(identifier, category.permission) then
+      return true
+    end
+  end
+  return false
+end
+
+local function hasTicketPermission(identifier, categoryId)
+  if not identifier or not categoryId then return false end
+  if isSupportAdmin(identifier) then return true end
+  local category = getCategory(categoryId)
+  if not category then return false end
+  return hasPermission(identifier, category.permission)
+end
+
+local function getTicketsForViewer(identifier)
+  local out = {}
+  if not identifier then return out end
+  for _, ticket in ipairs(ticketsData.tickets) do
+    if ticket.status == 'open' or ticket.status == 'cancelled' then
+      if hasTicketPermission(identifier, ticket.category) then
+        table.insert(out, ticket)
+      end
+    end
+  end
+  return out
+end
+
+local function createTicket(src, description, categoryId)
+  local identifier = getPlayerPrimaryIdentifier(src)
+  if not identifier then return nil, "invalid_identifier" end
+  if activeTicketByIdentifier[identifier] then
+    return nil, "already_has_ticket"
+  end
+  local category = getCategory(categoryId)
+  if not category then
+    return nil, "invalid_category"
+  end
+  local ticket = {
+    id = ticketsData.nextId,
+    source = src,
+    identifier = identifier,
+    category = categoryId,
+    description = description,
+    status = "open",
+    createdAt = os.time(),
+  }
+  ticketsData.nextId = ticketsData.nextId + 1
+  table.insert(ticketsData.tickets, ticket)
+  activeTicketByIdentifier[identifier] = ticket.id
+  saveTickets()
+  return ticket
+end
+
+local function cancelTicket(src)
+  local identifier = getPlayerPrimaryIdentifier(src)
+  if not identifier then return nil, "invalid_identifier" end
+  local ticketId = activeTicketByIdentifier[identifier]
+  if not ticketId then
+    return nil, "no_active_ticket"
+  end
+  for _, ticket in ipairs(ticketsData.tickets) do
+    if ticket.id == ticketId then
+      ticket.status = "cancelled"
+      ticket.cancelledAt = os.time()
+      activeTicketByIdentifier[identifier] = nil
+      saveTickets()
+      return ticket
+    end
+  end
+  return nil, "ticket_not_found"
+end
+
+local function pushStaffUpdates()
+  for _, playerSrc in ipairs(GetPlayers()) do
+    local target = tonumber(playerSrc)
+    if target then
+      local identifier = getPlayerPrimaryIdentifier(target)
+      if identifier and canViewTickets(identifier) then
+        TriggerClientEvent('support:receivePortalTickets', target, getTicketsForViewer(identifier), ticketCategories, isSupportAdmin(identifier))
+      end
+    end
+  end
+end
+
 -- Commands for default admin
 RegisterCommand('createrank', function(src, args)
   if not isAdminSource(src) then reply(src, "Not authorized") return end
@@ -171,6 +321,7 @@ end, false)
 
 -- Initialize
 loadRanks()
+loadTickets()
 
 -- ensure owner rank and default admin assignment
 if Config.defaultAdmin and Config.defaultAdmin ~= "replace_with_admin_identifier" then
@@ -184,6 +335,17 @@ if Config.defaultAdmin and Config.defaultAdmin ~= "replace_with_admin_identifier
 else
   print("[StaffPortal] Warning: Config.defaultAdmin not set. Set it in config.lua to enable default admin features.")
 end
+
+-- register internal support ticket permissions so they appear in the portal
+registerPermissions(resource, {
+  'support.admin',
+  'support.legal',
+  'support.gangs',
+  'support.sales',
+  'support.pier',
+  'support.viewall',
+  'support.*',
+})
 
 -- NUI / client integration
 RegisterServerEvent('staffportal:requestData')
@@ -227,4 +389,42 @@ AddEventHandler('staffportal:deleteRank', function(name)
   deleteRank(name)
   loadRanks()
   TriggerClientEvent('staffportal:receiveData', src, ranksData.ranks, ranksData.assignments, true, getAvailablePermissions())
+end)
+
+RegisterServerEvent('support:createTicket')
+AddEventHandler('support:createTicket', function(description, categoryId)
+  local src = source
+  description = tostring(description or '')
+  categoryId = tostring(categoryId or '')
+  if description == '' or categoryId == '' then
+    TriggerClientEvent('support:ticketCreateFailed', src, 'invalid_input')
+    return
+  end
+  local ticket, err = createTicket(src, description, categoryId)
+  if not ticket then
+    TriggerClientEvent('support:ticketCreateFailed', src, err)
+    return
+  end
+  TriggerClientEvent('support:ticketCreated', src, ticket)
+  pushStaffUpdates()
+end)
+
+RegisterServerEvent('support:cancelTicket')
+AddEventHandler('support:cancelTicket', function()
+  local src = source
+  local ticket, err = cancelTicket(src)
+  if not ticket then
+    TriggerClientEvent('support:ticketCancelFailed', src, err)
+    return
+  end
+  TriggerClientEvent('support:ticketCancelled', src, ticket)
+  pushStaffUpdates()
+end)
+
+RegisterServerEvent('support:requestPortalTickets')
+AddEventHandler('support:requestPortalTickets', function()
+  local src = source
+  local identifier = getPlayerPrimaryIdentifier(src)
+  if not identifier then return end
+  TriggerClientEvent('support:receivePortalTickets', src, getTicketsForViewer(identifier), ticketCategories, isSupportAdmin(identifier))
 end)

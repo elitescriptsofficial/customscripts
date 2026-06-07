@@ -7,33 +7,66 @@
     <title>Staff Portal</title>
   </head>
   <body>
+    <div id="ticketPopup" class="popup hidden">
+      <div class="popup-content">
+        <h4 id="popupTitle">Support Ticket</h4>
+        <p id="popupText">Someone will be with you soon</p>
+        <p id="popupSubtext">Press F7 to cancel ticket</p>
+      </div>
+    </div>
+
     <div id="app" class="hidden">
       <div class="header">
-        <h2>Staff Portal</h2>
+        <h2 id="pageTitle">Support Ticket</h2>
         <button id="close">Close</button>
       </div>
-      <div class="content">
-        <div class="column">
-          <h3>Ranks</h3>
-          <ul id="ranksList"></ul>
-          <div class="form">
-            <input id="rankName" placeholder="Rank name" />
-            <div id="permissionsContainer" class="permissions"></div>
-            <small>Permissions are provided by other resources and listed below.</small>
-            <button id="createRank">Create Rank</button>
+
+      <div id="ticketMode" class="mode">
+        <div class="content">
+          <div class="column full">
+            <h3>Create a Support Ticket</h3>
+            <select id="ticketCategory">
+              <option value="admin">Admin Tickets</option>
+              <option value="legal">Legal Tickets</option>
+              <option value="gangs">Gangs Tickets</option>
+              <option value="sales">Sales Tickets</option>
+              <option value="pier">Pier Team Tickets</option>
+            </select>
+            <textarea id="ticketDescription" placeholder="Briefly describe what happened"></textarea>
+            <button id="createSupportTicket">Create Ticket</button>
           </div>
         </div>
-        <div class="column">
-          <h3>Assignments</h3>
-          <ul id="assignList"></ul>
-          <div class="form">
-            <input id="assignIdentifier" placeholder="playerId or identifier" />
-            <input id="assignRank" placeholder="rank name" />
-            <button id="assignBtn">Assign Rank</button>
+      </div>
+
+      <div id="staffMode" class="mode hidden">
+        <div class="content">
+          <div class="column">
+            <h3>Ranks</h3>
+            <ul id="ranksList"></ul>
+            <div class="form">
+              <input id="rankName" placeholder="Rank name" />
+              <div id="permissionsContainer" class="permissions"></div>
+              <small>Permissions are provided by other resources and listed below.</small>
+              <button id="createRank">Create Rank</button>
+            </div>
           </div>
+          <div class="column">
+            <h3>Assignments</h3>
+            <ul id="assignList"></ul>
+            <div class="form">
+              <input id="assignIdentifier" placeholder="playerId or identifier" />
+              <input id="assignRank" placeholder="rank name" />
+              <button id="assignBtn">Assign Rank</button>
+            </div>
+          </div>
+        </div>
+        <div class="ticket-section">
+          <h3>Admin Tickets</h3>
+          <ul id="ticketsList"></ul>
         </div>
       </div>
     </div>
+
     <script src="app.js"></script>
   </body>
-  </html>
+</html>
