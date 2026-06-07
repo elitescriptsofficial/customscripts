@@ -1,0 +1,39 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="stylesheet" href="styles.css">
+    <title>Staff Portal</title>
+  </head>
+  <body>
+    <div id="app" class="hidden">
+      <div class="header">
+        <h2>Staff Portal</h2>
+        <button id="close">Close</button>
+      </div>
+      <div class="content">
+        <div class="column">
+          <h3>Ranks</h3>
+          <ul id="ranksList"></ul>
+          <div class="form">
+            <input id="rankName" placeholder="Rank name" />
+            <div id="permissionsContainer" class="permissions"></div>
+            <small>Permissions are provided by other resources and listed below.</small>
+            <button id="createRank">Create Rank</button>
+          </div>
+        </div>
+        <div class="column">
+          <h3>Assignments</h3>
+          <ul id="assignList"></ul>
+          <div class="form">
+            <input id="assignIdentifier" placeholder="playerId or identifier" />
+            <input id="assignRank" placeholder="rank name" />
+            <button id="assignBtn">Assign Rank</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script src="app.js"></script>
+  </body>
+  </html>
